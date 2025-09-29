@@ -72,8 +72,6 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			const history = historyRef.current;
 			const currentIndex = historyIndexRef.current;
 			
-			console.log('Save to history - Current index:', currentIndex, 'History length:', history.length);
-			
 			// Remove any states after current index (when we're not at the end)
 			if (currentIndex < history.length - 1) {
 				history.splice(currentIndex + 1);
@@ -82,8 +80,6 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			// Add new state
 			history.push(state);
 			historyIndexRef.current = history.length - 1;
-			
-			console.log('Save to history - New index:', historyIndexRef.current, 'New length:', history.length);
 			
 			// Limit history to 50 states
 			if (history.length > 50) {
@@ -128,11 +124,8 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		const history = historyRef.current;
 		const currentIndex = historyIndexRef.current;
 		
-		console.log('Redo - Current index:', currentIndex, 'History length:', history.length);
-		
 		// Can't redo if we're at the end
 		if (currentIndex >= history.length - 1) {
-			console.log('Cannot redo - at end of history');
 			return;
 		}
 		
@@ -140,11 +133,8 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		historyIndexRef.current = currentIndex + 1;
 		const state = history[historyIndexRef.current];
 		
-		console.log('Redo - New index:', historyIndexRef.current, 'State exists:', !!state);
-		
 		if (state) {
 			// Temporarily disable history saving during redo
-			const originalSaveToHistory = saveToHistory;
 			window._tempDisableHistory = true;
 			
 			canvas.loadFromJSON(state, () => {
@@ -441,6 +431,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			if (fontStyle) obj.set('fontStyle', fontStyle);
 			obj.canvas.requestRenderAll();
 			emitLayers();
+			saveToHistory();
 		},
 
 		addShape: ({ shape, width, height, fill, stroke, strokeWidth }) => {
@@ -498,6 +489,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			obj.setCoords();
 			obj.canvas.requestRenderAll();
 			emitLayers();
+			saveToHistory();
 		},
 
 		addImageFromFile: (file) => {
@@ -526,6 +518,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			obj.setCoords();
 			obj.canvas.requestRenderAll();
 			emitLayers();
+			saveToHistory();
 		},
 
 		deleteActive: () => {
@@ -733,44 +726,82 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		exportAsPNG: () => {
 			const canvas = fabricRef.current;
 			if (!canvas) return;
-			canvas.renderAll();
-			setTimeout(() => {
-				const dataURL = canvas.toDataURL({
-					format: 'png',
-					quality: 1,
-					multiplier: 1,
-					backgroundColor: '#ffffff',
-					enableRetinaScaling: false
+			
+			// Create a new canvas for export to avoid rendering issues
+			const exportCanvas = new fabric.Canvas(document.createElement('canvas'));
+			exportCanvas.setWidth(canvas.getWidth());
+			exportCanvas.setHeight(canvas.getHeight());
+			exportCanvas.setBackgroundColor('#ffffff', exportCanvas.renderAll.bind(exportCanvas));
+			
+			// Clone all objects to the export canvas
+			canvas.getObjects().forEach(obj => {
+				obj.clone(cloned => {
+					exportCanvas.add(cloned);
 				});
-				downloadImage(dataURL, 'design.png');
-			}, 100);
+			});
+			
+			// Wait for cloning to complete, then export
+			setTimeout(() => {
+				try {
+					const dataURL = exportCanvas.toDataURL({
+						format: 'png',
+						quality: 1
+					});
+					downloadImage(dataURL, 'design.png');
+					exportCanvas.dispose();
+				} catch (error) {
+					console.error('Export failed:', error);
+				}
+			}, 300);
 		},
 		exportAsJPG: () => {
 			const canvas = fabricRef.current;
 			if (!canvas) return;
-			canvas.renderAll();
-			setTimeout(() => {
-				const dataURL = canvas.toDataURL({
-					format: 'jpeg',
-					quality: 0.9,
-					multiplier: 1,
-					backgroundColor: '#ffffff',
-					enableRetinaScaling: false
+			
+			// Create a new canvas for export to avoid rendering issues
+			const exportCanvas = new fabric.Canvas(document.createElement('canvas'));
+			exportCanvas.setWidth(canvas.getWidth());
+			exportCanvas.setHeight(canvas.getHeight());
+			exportCanvas.setBackgroundColor('#ffffff', exportCanvas.renderAll.bind(exportCanvas));
+			
+			// Clone all objects to the export canvas
+			canvas.getObjects().forEach(obj => {
+				obj.clone(cloned => {
+					exportCanvas.add(cloned);
 				});
-				downloadImage(dataURL, 'design.jpg');
-			}, 100);
+			});
+			
+			// Wait for cloning to complete, then export
+			setTimeout(() => {
+				try {
+					const dataURL = exportCanvas.toDataURL({
+						format: 'jpeg',
+						quality: 0.9
+					});
+					downloadImage(dataURL, 'design.jpg');
+					exportCanvas.dispose();
+				} catch (error) {
+					console.error('Export failed:', error);
+				}
+			}, 300);
 		},
 		// Alignment tools
 		alignLeft: () => {
 			const canvas = fabricRef.current;
 			if (!canvas) return;
 			const activeObjects = canvas.getActiveObjects();
-			if (activeObjects.length < 2) return;
+			if (activeObjects.length === 0) return;
 			
-			const leftmost = Math.min(...activeObjects.map(obj => obj.left));
-			activeObjects.forEach(obj => {
-				obj.set('left', leftmost);
-			});
+			if (activeObjects.length === 1) {
+				// Single object - align to canvas left
+				activeObjects[0].set('left', 0);
+			} else {
+				// Multiple objects - align to leftmost
+				const leftmost = Math.min(...activeObjects.map(obj => obj.left));
+				activeObjects.forEach(obj => {
+					obj.set('left', leftmost);
+				});
+			}
 			canvas.renderAll();
 			emitLayers();
 			saveToHistory();
@@ -779,11 +810,11 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			const canvas = fabricRef.current;
 			if (!canvas) return;
 			const activeObjects = canvas.getActiveObjects();
-			if (activeObjects.length < 2) return;
+			if (activeObjects.length === 0) return;
 			
 			const centerX = canvas.getWidth() / 2;
 			activeObjects.forEach(obj => {
-				obj.set('left', centerX - obj.getWidth() / 2);
+				obj.set('left', centerX - obj.width * obj.scaleX / 2);
 			});
 			canvas.renderAll();
 			emitLayers();
@@ -793,12 +824,21 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			const canvas = fabricRef.current;
 			if (!canvas) return;
 			const activeObjects = canvas.getActiveObjects();
-			if (activeObjects.length < 2) return;
+			if (activeObjects.length === 0) return;
 			
-			const rightmost = Math.max(...activeObjects.map(obj => obj.left + obj.getWidth()));
-			activeObjects.forEach(obj => {
-				obj.set('left', rightmost - obj.getWidth());
-			});
+			if (activeObjects.length === 1) {
+				// Single object - align to canvas right
+				const obj = activeObjects[0];
+				const objWidth = obj.width * obj.scaleX;
+				obj.set('left', canvas.getWidth() - objWidth);
+			} else {
+				// Multiple objects - align to rightmost
+				const rightmost = Math.max(...activeObjects.map(obj => obj.left + (obj.width * obj.scaleX)));
+				activeObjects.forEach(obj => {
+					const objWidth = obj.width * obj.scaleX;
+					obj.set('left', rightmost - objWidth);
+				});
+			}
 			canvas.renderAll();
 			emitLayers();
 			saveToHistory();
@@ -873,7 +913,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		
 		const centerX = canvas.getWidth() / 2;
 		activeObjects.forEach(obj => {
-			obj.set('left', centerX - obj.getWidth() / 2);
+			obj.set('left', centerX - obj.width * obj.scaleX / 2);
 		});
 		canvas.renderAll();
 		emitLayers();
@@ -888,12 +928,15 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		
 		if (activeObjects.length === 1) {
 			// Single object - align to canvas right
-			activeObjects[0].set('left', canvas.getWidth() - activeObjects[0].getWidth());
+			const obj = activeObjects[0];
+			const objWidth = obj.width * obj.scaleX;
+			obj.set('left', canvas.getWidth() - objWidth);
 		} else {
 			// Multiple objects - align to rightmost
-			const rightmost = Math.max(...activeObjects.map(obj => obj.left + obj.getWidth()));
+			const rightmost = Math.max(...activeObjects.map(obj => obj.left + (obj.width * obj.scaleX)));
 			activeObjects.forEach(obj => {
-				obj.set('left', rightmost - obj.getWidth());
+				const objWidth = obj.width * obj.scaleX;
+				obj.set('left', rightmost - objWidth);
 			});
 		}
 		canvas.renderAll();
@@ -905,40 +948,66 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		const canvas = fabricRef.current;
 		if (!canvas) return;
 		
-		// Force render and wait a bit for completion
-		canvas.renderAll();
+		// Create a new canvas for export to avoid rendering issues
+		const exportCanvas = new fabric.Canvas(document.createElement('canvas'));
+		exportCanvas.setWidth(canvas.getWidth());
+		exportCanvas.setHeight(canvas.getHeight());
+		exportCanvas.setBackgroundColor('#ffffff', exportCanvas.renderAll.bind(exportCanvas));
 		
-		// Use setTimeout to ensure rendering is complete
-		setTimeout(() => {
-			const dataURL = canvas.toDataURL({
-				format: 'png',
-				quality: 1,
-				multiplier: 1,
-				backgroundColor: '#ffffff',
-				enableRetinaScaling: false
+		// Clone all objects to the export canvas
+		canvas.getObjects().forEach(obj => {
+			obj.clone(cloned => {
+				exportCanvas.add(cloned);
 			});
-			downloadImage(dataURL, 'design.png');
-		}, 100);
+		});
+		
+		// Wait for cloning to complete, then export
+		setTimeout(() => {
+			try {
+				const dataURL = exportCanvas.toDataURL({
+					format: 'png',
+					quality: 1
+				});
+				downloadImage(dataURL, 'design.png');
+				exportCanvas.dispose();
+			} catch (error) {
+				console.error('Export failed:', error);
+				alert('Export failed. Please try again.');
+			}
+		}, 300);
 	};
 
 	const handleExportJPG = () => {
 		const canvas = fabricRef.current;
 		if (!canvas) return;
 		
-		// Force render and wait a bit for completion
-		canvas.renderAll();
+		// Create a new canvas for export to avoid rendering issues
+		const exportCanvas = new fabric.Canvas(document.createElement('canvas'));
+		exportCanvas.setWidth(canvas.getWidth());
+		exportCanvas.setHeight(canvas.getHeight());
+		exportCanvas.setBackgroundColor('#ffffff', exportCanvas.renderAll.bind(exportCanvas));
 		
-		// Use setTimeout to ensure rendering is complete
-		setTimeout(() => {
-			const dataURL = canvas.toDataURL({
-				format: 'jpeg',
-				quality: 0.9,
-				multiplier: 1,
-				backgroundColor: '#ffffff',
-				enableRetinaScaling: false
+		// Clone all objects to the export canvas
+		canvas.getObjects().forEach(obj => {
+			obj.clone(cloned => {
+				exportCanvas.add(cloned);
 			});
-			downloadImage(dataURL, 'design.jpg');
-		}, 100);
+		});
+		
+		// Wait for cloning to complete, then export
+		setTimeout(() => {
+			try {
+				const dataURL = exportCanvas.toDataURL({
+					format: 'jpeg',
+					quality: 0.9
+				});
+				downloadImage(dataURL, 'design.jpg');
+				exportCanvas.dispose();
+			} catch (error) {
+				console.error('Export failed:', error);
+				alert('Export failed. Please try again.');
+			}
+		}, 300);
 	};
 
   return (
