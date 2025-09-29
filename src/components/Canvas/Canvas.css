@@ -177,6 +177,36 @@
   overflow: hidden;
 }
 
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .canvas-container {
+    padding: 20px;
+  }
+  
+  .canvas {
+    width: 100%;
+    max-width: 400px;
+    height: 300px;
+  }
+  
+  .canvas-actions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  
+  .zoom-controls,
+  .export-controls,
+  .alignment-controls {
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  
+  .canvas-actions button {
+    padding: 6px 8px;
+    font-size: 12px;
+  }
+}
+
 /* Canvas Elements */
 .canvas-element {
   position: absolute;

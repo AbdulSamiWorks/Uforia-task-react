@@ -10,16 +10,30 @@ const ImagePropertiesPopup = ({ isOpen, onClose, canvasRef, mode = 'add' }) => {
   const [borderColor, setBorderColor] = useState('#000000');
 
   useEffect(() => {
-    if (isOpen && mode === 'edit' && canvasRef?.current) {
-      const props = canvasRef.current.getActiveProps?.();
-      if (props && props.type === 'image') {
-        setWidth(Math.round(props.width || 200));
-        setHeight(Math.round(props.height || 200));
-        setOpacity(Math.round((props.opacity ?? 1) * 100));
+    if (isOpen) {
+      if (mode === 'edit' && canvasRef?.current) {
+        const props = canvasRef.current.getActiveProps?.();
+        if (props && props.type === 'image') {
+          setWidth(Math.round(props.width || 200));
+          setHeight(Math.round(props.height || 200));
+          setOpacity(Math.round((props.opacity ?? 1) * 100));
+        }
+      } else if (mode === 'add') {
+        // Reset to default values for new element
+        setWidth(200);
+        setHeight(200);
+        setOpacity(100);
+        setBorderWidth(0);
+        setBorderColor('#000000');
       }
     }
   }, [isOpen, mode, canvasRef]);
 
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
 
   const handleApply = () => {
     const api = canvasRef?.current;
@@ -37,7 +51,11 @@ const ImagePropertiesPopup = ({ isOpen, onClose, canvasRef, mode = 'add' }) => {
   const handleAdd = () => {
     const api = canvasRef?.current;
     if (!api || !file) return;
-    api.addImageFromFile(file);
+    api.addImageFromFile(file, {
+      width: Number(width),
+      height: Number(height),
+      opacity: Number(opacity) / 100
+    });
     onClose();
   };
 
@@ -50,7 +68,7 @@ const ImagePropertiesPopup = ({ isOpen, onClose, canvasRef, mode = 'add' }) => {
   if (!isOpen) return null;
 
   return (
-    <div className="popup-overlay">
+    <div className="popup-overlay" onClick={handleOverlayClick}>
       <div className="popup-container image-properties-popup">
         <div className="popup-header">
           <h3>Image Properties</h3>

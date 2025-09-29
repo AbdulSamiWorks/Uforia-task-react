@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useImperativeHandle, forwardRef } from 'react';
+import React, { useEffect, useRef, useImperativeHandle, forwardRef, useState } from 'react';
 import { fabric } from 'fabric';
 import './Canvas.css';
 
@@ -9,6 +9,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 	const fabricRef = useRef(null);
 	const historyRef = useRef([]);
 	const historyIndexRef = useRef(-1);
+	const [zoomLevel, setZoomLevel] = useState(100);
 
 	// helper to sync layers to parent (simple mapping)
 	const emitLayers = () => {
@@ -214,10 +215,13 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 	};
 
 	useEffect(() => {
+		if (!canvasElRef.current) return;
+		
 		const canvas = new fabric.Canvas(canvasElRef.current, {
 			preserveObjectStacking: true,
 			selection: true,
 			backgroundColor: '#ffffff',
+			enableRetinaScaling: false,
 		});
 		fabricRef.current = canvas;
 
@@ -492,18 +496,32 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			saveToHistory();
 		},
 
-		addImageFromFile: (file) => {
+		addImageFromFile: (file, options = {}) => {
 			const canvas = fabricRef.current;
 			if (!canvas || !file) return;
 			const reader = new FileReader();
 			reader.onload = (e) => {
 				fabric.Image.fromURL(e.target.result, (img) => {
-					img.set({ left: 350, top: 150, opacity: 1 });
+					img.set({ 
+						left: 350, 
+						top: 150, 
+						opacity: options.opacity || 1 
+					});
+					
+					// Apply dimensions if provided
+					if (options.width) {
+						img.scaleToWidth(options.width);
+					}
+					if (options.height) {
+						img.scaleToHeight(options.height);
+					}
+					
 					ensureIds(img);
 					canvas.add(img);
 					canvas.setActiveObject(img);
 					canvas.renderAll();
 					emitLayers();
+					saveToHistory();
 				});
 			};
 			reader.readAsDataURL(file);
@@ -727,63 +745,57 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			const canvas = fabricRef.current;
 			if (!canvas) return;
 			
-			// Create a new canvas for export to avoid rendering issues
-			const exportCanvas = new fabric.Canvas(document.createElement('canvas'));
-			exportCanvas.setWidth(canvas.getWidth());
-			exportCanvas.setHeight(canvas.getHeight());
-			exportCanvas.setBackgroundColor('#ffffff', exportCanvas.renderAll.bind(exportCanvas));
-			
-			// Clone all objects to the export canvas
-			canvas.getObjects().forEach(obj => {
-				obj.clone(cloned => {
-					exportCanvas.add(cloned);
+			// Use the main canvas directly
+			try {
+				canvas.setBackgroundColor('#ffffff', () => {
+					canvas.renderAll();
+					
+					setTimeout(() => {
+						try {
+							const dataURL = canvas.toDataURL({
+								format: 'png',
+								quality: 1,
+								multiplier: 1
+							});
+							downloadImage(dataURL, 'design.png');
+						} catch (error) {
+							console.error('Export failed:', error);
+							alert('Export failed. Please try again.');
+						}
+					}, 100);
 				});
-			});
-			
-			// Wait for cloning to complete, then export
-			setTimeout(() => {
-				try {
-					const dataURL = exportCanvas.toDataURL({
-						format: 'png',
-						quality: 1
-					});
-					downloadImage(dataURL, 'design.png');
-					exportCanvas.dispose();
-				} catch (error) {
-					console.error('Export failed:', error);
-				}
-			}, 300);
+			} catch (error) {
+				console.error('Export setup failed:', error);
+				alert('Export failed. Please try again.');
+			}
 		},
 		exportAsJPG: () => {
 			const canvas = fabricRef.current;
 			if (!canvas) return;
 			
-			// Create a new canvas for export to avoid rendering issues
-			const exportCanvas = new fabric.Canvas(document.createElement('canvas'));
-			exportCanvas.setWidth(canvas.getWidth());
-			exportCanvas.setHeight(canvas.getHeight());
-			exportCanvas.setBackgroundColor('#ffffff', exportCanvas.renderAll.bind(exportCanvas));
-			
-			// Clone all objects to the export canvas
-			canvas.getObjects().forEach(obj => {
-				obj.clone(cloned => {
-					exportCanvas.add(cloned);
+			// Use the main canvas directly
+			try {
+				canvas.setBackgroundColor('#ffffff', () => {
+					canvas.renderAll();
+					
+					setTimeout(() => {
+						try {
+							const dataURL = canvas.toDataURL({
+								format: 'jpeg',
+								quality: 0.9,
+								multiplier: 1
+							});
+							downloadImage(dataURL, 'design.jpg');
+						} catch (error) {
+							console.error('Export failed:', error);
+							alert('Export failed. Please try again.');
+						}
+					}, 100);
 				});
-			});
-			
-			// Wait for cloning to complete, then export
-			setTimeout(() => {
-				try {
-					const dataURL = exportCanvas.toDataURL({
-						format: 'jpeg',
-						quality: 0.9
-					});
-					downloadImage(dataURL, 'design.jpg');
-					exportCanvas.dispose();
-				} catch (error) {
-					console.error('Export failed:', error);
-				}
-			}, 300);
+			} catch (error) {
+				console.error('Export setup failed:', error);
+				alert('Export failed. Please try again.');
+			}
 		},
 		// Alignment tools
 		alignLeft: () => {
@@ -862,6 +874,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		const currentZoom = canvas.getZoom();
 		const newZoom = Math.max(currentZoom / 1.2, 0.1);
 		canvas.setZoom(newZoom);
+		setZoomLevel(Math.round(newZoom * 100));
 		canvas.renderAll();
 	};
 
@@ -871,6 +884,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		const currentZoom = canvas.getZoom();
 		const newZoom = Math.min(currentZoom * 1.2, 3);
 		canvas.setZoom(newZoom);
+		setZoomLevel(Math.round(newZoom * 100));
 		canvas.renderAll();
 	};
 
@@ -878,6 +892,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		const canvas = fabricRef.current;
 		if (!canvas) return;
 		canvas.setZoom(1);
+		setZoomLevel(100);
 		canvas.renderAll();
 	};
 
@@ -948,66 +963,58 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		const canvas = fabricRef.current;
 		if (!canvas) return;
 		
-		// Create a new canvas for export to avoid rendering issues
-		const exportCanvas = new fabric.Canvas(document.createElement('canvas'));
-		exportCanvas.setWidth(canvas.getWidth());
-		exportCanvas.setHeight(canvas.getHeight());
-		exportCanvas.setBackgroundColor('#ffffff', exportCanvas.renderAll.bind(exportCanvas));
-		
-		// Clone all objects to the export canvas
-		canvas.getObjects().forEach(obj => {
-			obj.clone(cloned => {
-				exportCanvas.add(cloned);
+		// Use the main canvas directly
+		try {
+			canvas.setBackgroundColor('#ffffff', () => {
+				canvas.renderAll();
+				
+				setTimeout(() => {
+					try {
+						const dataURL = canvas.toDataURL({
+							format: 'png',
+							quality: 1,
+							multiplier: 1
+						});
+						downloadImage(dataURL, 'design.png');
+					} catch (error) {
+						console.error('Export failed:', error);
+						alert('Export failed. Please try again.');
+					}
+				}, 100);
 			});
-		});
-		
-		// Wait for cloning to complete, then export
-		setTimeout(() => {
-			try {
-				const dataURL = exportCanvas.toDataURL({
-					format: 'png',
-					quality: 1
-				});
-				downloadImage(dataURL, 'design.png');
-				exportCanvas.dispose();
-			} catch (error) {
-				console.error('Export failed:', error);
-				alert('Export failed. Please try again.');
-			}
-		}, 300);
+		} catch (error) {
+			console.error('Export setup failed:', error);
+			alert('Export failed. Please try again.');
+		}
 	};
 
 	const handleExportJPG = () => {
 		const canvas = fabricRef.current;
 		if (!canvas) return;
 		
-		// Create a new canvas for export to avoid rendering issues
-		const exportCanvas = new fabric.Canvas(document.createElement('canvas'));
-		exportCanvas.setWidth(canvas.getWidth());
-		exportCanvas.setHeight(canvas.getHeight());
-		exportCanvas.setBackgroundColor('#ffffff', exportCanvas.renderAll.bind(exportCanvas));
-		
-		// Clone all objects to the export canvas
-		canvas.getObjects().forEach(obj => {
-			obj.clone(cloned => {
-				exportCanvas.add(cloned);
+		// Use the main canvas directly
+		try {
+			canvas.setBackgroundColor('#ffffff', () => {
+				canvas.renderAll();
+				
+				setTimeout(() => {
+					try {
+						const dataURL = canvas.toDataURL({
+							format: 'jpeg',
+							quality: 0.9,
+							multiplier: 1
+						});
+						downloadImage(dataURL, 'design.jpg');
+					} catch (error) {
+						console.error('Export failed:', error);
+						alert('Export failed. Please try again.');
+					}
+				}, 100);
 			});
-		});
-		
-		// Wait for cloning to complete, then export
-		setTimeout(() => {
-			try {
-				const dataURL = exportCanvas.toDataURL({
-					format: 'jpeg',
-					quality: 0.9
-				});
-				downloadImage(dataURL, 'design.jpg');
-				exportCanvas.dispose();
-			} catch (error) {
-				console.error('Export failed:', error);
-				alert('Export failed. Please try again.');
-			}
-		}, 300);
+		} catch (error) {
+			console.error('Export setup failed:', error);
+			alert('Export failed. Please try again.');
+		}
 	};
 
   return (
@@ -1015,7 +1022,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
       <div className="canvas-tools">
         <div className="zoom-controls">
           <button onClick={handleZoomOut} title="Zoom Out">-</button>
-          <span>100%</span>
+          <span>{zoomLevel}%</span>
           <button onClick={handleZoomIn} title="Zoom In">+</button>
           <button onClick={handleZoomFit} title="Fit to Screen">⌂</button>
         </div>
@@ -1028,7 +1035,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
         </div>
         <div className="alignment-controls">
           <button onClick={handleAlignLeft} title="Align Left">⫷</button>
-          <button onClick={handleAlignCenter} title="Align Center">⫸</button>
+          <button onClick={handleAlignCenter} title="Align Center">⧉</button>
           <button onClick={handleAlignRight} title="Align Right">⫸</button>
         </div>
         <div className="export-controls">

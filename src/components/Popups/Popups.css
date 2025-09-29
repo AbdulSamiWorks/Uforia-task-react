@@ -220,6 +220,37 @@ input[type="range"]::-webkit-slider-thumb {
   gap: 3px;
 }
 
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .popup-container {
+    width: 90%;
+    max-width: 350px;
+    margin: 20px;
+  }
+  
+  .popup-header h3 {
+    font-size: 16px;
+  }
+  
+  .property-group label {
+    font-size: 12px;
+  }
+  
+  .popup-footer button {
+    padding: 8px 12px;
+    font-size: 12px;
+  }
+  
+  .text-content-input {
+    font-size: 14px;
+  }
+  
+  .color-input {
+    width: 40px;
+    height: 30px;
+  }
+}
+
 .apply-button {
   background-color: #00c4cc;
   color: white;

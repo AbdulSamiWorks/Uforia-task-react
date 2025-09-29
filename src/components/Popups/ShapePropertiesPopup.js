@@ -11,21 +11,38 @@ const ShapePropertiesPopup = ({ isOpen, onClose, canvasRef, mode = 'add' }) => {
   const [cornerRadius, setCornerRadius] = useState(0);
 
   useEffect(() => {
-    if (isOpen && mode === 'edit' && canvasRef?.current) {
-      const props = canvasRef.current.getActiveProps?.();
-      if (props && props.type === 'shape') {
-        setShape(props.shape || 'rectangle');
-        setWidth(Math.round(props.width || 100));
-        setHeight(Math.round(props.height || 100));
-        setFill(props.fill || '#ffffff');
-        setOutlineColor(props.stroke || '#000000');
-        setOutlineWidth(props.strokeWidth || 0);
-        setCornerRadius(props.cornerRadius || 0);
+    if (isOpen) {
+      if (mode === 'edit' && canvasRef?.current) {
+        const props = canvasRef.current.getActiveProps?.();
+        if (props && props.type === 'shape') {
+          setShape(props.shape || 'rectangle');
+          setWidth(Math.round(props.width || 100));
+          setHeight(Math.round(props.height || 100));
+          setFill(props.fill || '#ffffff');
+          setOutlineColor(props.stroke || '#000000');
+          setOutlineWidth(props.strokeWidth || 0);
+          setCornerRadius(props.cornerRadius || 0);
+        }
+      } else if (mode === 'add') {
+        // Reset to default values for new element
+        setShape('rectangle');
+        setWidth(100);
+        setHeight(100);
+        setFill('#00c4cc');
+        setOutlineColor('#000000');
+        setOutlineWidth(0);
+        setCornerRadius(0);
       }
     }
   }, [isOpen, mode, canvasRef]);
 
   if (!isOpen) return null;
+
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
 
   const handleApply = () => {
     const api = canvasRef?.current;
@@ -63,7 +80,7 @@ const ShapePropertiesPopup = ({ isOpen, onClose, canvasRef, mode = 'add' }) => {
   };
 
   return (
-    <div className="popup-overlay">
+    <div className="popup-overlay" onClick={handleOverlayClick}>
       <div className="popup-container shape-properties-popup">
         <div className="popup-header">
           <h3>Shape Properties</h3>

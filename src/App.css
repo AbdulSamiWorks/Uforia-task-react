@@ -16,3 +16,14 @@
   position: relative;
   background-color: #f8f9fa;
 }
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .main-container {
+    flex-direction: column;
+  }
+  
+  .App {
+    font-size: 14px;
+  }
+}

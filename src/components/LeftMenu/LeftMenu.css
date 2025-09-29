@@ -75,3 +75,25 @@
   font-weight: 500;
   letter-spacing: -0.2px;
 }
+
+/* Mobile Responsive */
+@media (max-width: 768px) {
+  .left-menu {
+    width: 100%;
+    height: auto;
+    flex-direction: row;
+    justify-content: space-around;
+    padding: 8px 0;
+    border-right: none;
+    border-bottom: 1px solid #e6e8eb;
+  }
+  
+  .menu-item {
+    margin-bottom: 0;
+    margin-right: 8px;
+  }
+  
+  .menu-label {
+    font-size: 8px;
+  }
+}

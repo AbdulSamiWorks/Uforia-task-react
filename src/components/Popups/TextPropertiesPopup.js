@@ -11,21 +11,38 @@ const TextPropertiesPopup = ({ isOpen, onClose, canvasRef, mode = 'add' }) => {
   const [underline, setUnderline] = useState(false);
 
   useEffect(() => {
-    if (isOpen && mode === 'edit' && canvasRef?.current) {
-      const props = canvasRef.current.getActiveProps?.();
-      if (props && props.type === 'text') {
-        setText(props.text || '');
-        setFontFamily(props.fontFamily || 'Arial');
-        setFontSize(props.fontSize || 16);
-        setColor(props.fill || '#000000');
-        setUnderline(!!props.underline);
-        setBold((props.fontWeight || 'normal') === 'bold');
-        setItalic((props.fontStyle || 'normal') === 'italic');
+    if (isOpen) {
+      if (mode === 'edit' && canvasRef?.current) {
+        const props = canvasRef.current.getActiveProps?.();
+        if (props && props.type === 'text') {
+          setText(props.text || '');
+          setFontFamily(props.fontFamily || 'Arial');
+          setFontSize(props.fontSize || 16);
+          setColor(props.fill || '#000000');
+          setUnderline(!!props.underline);
+          setBold((props.fontWeight || 'normal') === 'bold');
+          setItalic((props.fontStyle || 'normal') === 'italic');
+        }
+      } else if (mode === 'add') {
+        // Reset to default values for new element
+        setText('Sample Text');
+        setFontFamily('Arial');
+        setFontSize(16);
+        setColor('#000000');
+        setUnderline(false);
+        setBold(false);
+        setItalic(false);
       }
     }
   }, [isOpen, mode, canvasRef]);
 
   if (!isOpen) return null;
+
+  const handleOverlayClick = (e) => {
+    if (e.target === e.currentTarget) {
+      onClose();
+    }
+  };
 
   const handleApply = () => {
     const api = canvasRef?.current;
@@ -65,7 +82,7 @@ const TextPropertiesPopup = ({ isOpen, onClose, canvasRef, mode = 'add' }) => {
   };
 
   return (
-    <div className="popup-overlay">
+    <div className="popup-overlay" onClick={handleOverlayClick}>
       <div className="popup-container text-properties-popup">
         <div className="popup-header">
           <h3>Text Properties</h3>
