@@ -7,6 +7,8 @@ let nextNumericId = 1;
 const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequest }, ref) => {
 	const canvasElRef = useRef(null);
 	const fabricRef = useRef(null);
+	const historyRef = useRef([]);
+	const historyIndexRef = useRef(-1);
 
 	// helper to sync layers to parent (simple mapping)
 	const emitLayers = () => {
@@ -48,10 +50,109 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 				canvas.loadFromJSON(savedData, () => {
 					canvas.renderAll();
 					emitLayers();
+					saveToHistory();
 				});
 			}
 		} catch (error) {
 			console.warn('Failed to load canvas state:', error);
+		}
+	};
+
+	// History management for undo/redo
+	const saveToHistory = () => {
+		// Skip saving if temporarily disabled (during redo/undo operations)
+		if (window._tempDisableHistory) {
+			return;
+		}
+		
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		try {
+			const state = JSON.stringify(canvas.toJSON());
+			const history = historyRef.current;
+			const currentIndex = historyIndexRef.current;
+			
+			console.log('Save to history - Current index:', currentIndex, 'History length:', history.length);
+			
+			// Remove any states after current index (when we're not at the end)
+			if (currentIndex < history.length - 1) {
+				history.splice(currentIndex + 1);
+			}
+			
+			// Add new state
+			history.push(state);
+			historyIndexRef.current = history.length - 1;
+			
+			console.log('Save to history - New index:', historyIndexRef.current, 'New length:', history.length);
+			
+			// Limit history to 50 states
+			if (history.length > 50) {
+				history.shift();
+				historyIndexRef.current--;
+			}
+		} catch (error) {
+			console.warn('Failed to save to history:', error);
+		}
+	};
+
+	const undo = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		
+		const history = historyRef.current;
+		const currentIndex = historyIndexRef.current;
+		
+		// Can't undo if we're at the beginning
+		if (currentIndex <= 0) return;
+		
+		historyIndexRef.current = currentIndex - 1;
+		const state = history[historyIndexRef.current];
+		
+		if (state) {
+			// Temporarily disable history saving during undo
+			window._tempDisableHistory = true;
+			
+			canvas.loadFromJSON(state, () => {
+				canvas.renderAll();
+				emitLayers();
+				// Re-enable history saving
+				window._tempDisableHistory = false;
+			});
+		}
+	};
+
+	const redo = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		
+		const history = historyRef.current;
+		const currentIndex = historyIndexRef.current;
+		
+		console.log('Redo - Current index:', currentIndex, 'History length:', history.length);
+		
+		// Can't redo if we're at the end
+		if (currentIndex >= history.length - 1) {
+			console.log('Cannot redo - at end of history');
+			return;
+		}
+		
+		// Move to next state
+		historyIndexRef.current = currentIndex + 1;
+		const state = history[historyIndexRef.current];
+		
+		console.log('Redo - New index:', historyIndexRef.current, 'State exists:', !!state);
+		
+		if (state) {
+			// Temporarily disable history saving during redo
+			const originalSaveToHistory = saveToHistory;
+			window._tempDisableHistory = true;
+			
+			canvas.loadFromJSON(state, () => {
+				canvas.renderAll();
+				emitLayers();
+				// Re-enable history saving
+				window._tempDisableHistory = false;
+			});
 		}
 	};
 
@@ -62,6 +163,63 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		}
 		if (!obj.__nid) {
 			obj.__nid = nextNumericId++;
+		}
+	};
+
+	// Handler functions for UI buttons and keyboard shortcuts
+	const handleCopy = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		const active = canvas.getActiveObject();
+		if (active) {
+			const clipboard = JSON.stringify(active.toObject());
+			localStorage.setItem('canva-clone-clipboard', clipboard);
+		}
+	};
+
+	const handlePaste = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		try {
+			const clipboard = localStorage.getItem('canva-clone-clipboard');
+			if (clipboard) {
+				const objData = JSON.parse(clipboard);
+				fabric.util.enlivenObjects([objData], (objects) => {
+					const obj = objects[0];
+					obj.set({
+						left: obj.left + 20,
+						top: obj.top + 20,
+					});
+					ensureIds(obj);
+					canvas.add(obj);
+					canvas.setActiveObject(obj);
+					canvas.renderAll();
+					emitLayers();
+					saveToHistory();
+				});
+			}
+		} catch (error) {
+			console.warn('Failed to paste:', error);
+		}
+	};
+
+	const handleDuplicate = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		const active = canvas.getActiveObject();
+		if (active) {
+			active.clone((cloned) => {
+				cloned.set({
+					left: cloned.left + 20,
+					top: cloned.top + 20,
+				});
+				ensureIds(cloned);
+				canvas.add(cloned);
+				canvas.setActiveObject(cloned);
+				canvas.renderAll();
+				emitLayers();
+				saveToHistory();
+			});
 		}
 	};
 
@@ -78,9 +236,16 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		canvas.on('object:added', (e) => {
 			if (e && e.target) ensureIds(e.target);
 			emitLayers();
+			saveToHistory();
 		});
-		canvas.on('object:modified', onChange);
-		canvas.on('object:removed', onChange);
+		canvas.on('object:modified', () => {
+			onChange();
+			saveToHistory();
+		});
+		canvas.on('object:removed', () => {
+			onChange();
+			saveToHistory();
+		});
 		canvas.on('object:skewing', onChange);
 		canvas.on('object:scaling', onChange);
 		canvas.on('object:moving', onChange);
@@ -105,13 +270,44 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			onObjectEditRequest && onObjectEditRequest(type);
 		});
 
-		// keyboard delete handling
+		// keyboard shortcuts handling
 		const handleKey = (e) => {
-			// Don't delete if user is typing in an input field
+			// Don't handle shortcuts if user is typing in an input field
 			if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
 				return;
 			}
 			
+			// Undo/Redo shortcuts
+			if (e.ctrlKey || e.metaKey) {
+				if (e.key === 'z' && !e.shiftKey) {
+					e.preventDefault();
+					undo();
+					return;
+				}
+				if ((e.key === 'z' && e.shiftKey) || e.key === 'y') {
+					e.preventDefault();
+					redo();
+					return;
+				}
+				// Copy/Paste shortcuts
+				if (e.key === 'c') {
+					e.preventDefault();
+					handleCopy();
+					return;
+				}
+				if (e.key === 'v') {
+					e.preventDefault();
+					handlePaste();
+					return;
+				}
+				if (e.key === 'd') {
+					e.preventDefault();
+					handleDuplicate();
+					return;
+				}
+			}
+			
+			// Delete shortcuts
 			if (e.key === 'Delete' || e.key === 'Backspace') {
 				const active = canvas.getActiveObject();
 				if (active) {
@@ -120,10 +316,23 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 					canvas.discardActiveObject();
 					canvas.requestRenderAll();
 					emitLayers();
+					saveToHistory();
 				}
 			}
 		};
 		document.addEventListener('keydown', handleKey);
+
+		// Mouse wheel zoom
+		canvas.on('mouse:wheel', (opt) => {
+			const delta = opt.e.deltaY;
+			let zoom = canvas.getZoom();
+			zoom *= 0.999 ** delta;
+			if (zoom > 3) zoom = 3;
+			if (zoom < 0.1) zoom = 0.1;
+			canvas.setZoom(zoom);
+			opt.e.preventDefault();
+			opt.e.stopPropagation();
+		});
 
 		// initial size
 		canvas.setWidth(800);
@@ -132,6 +341,9 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 
 		// Load saved canvas state after initialization
 		loadCanvasState();
+
+		// Initialize history with empty state
+		saveToHistory();
 
 		return () => {
 			document.removeEventListener('keydown', handleKey);
@@ -435,14 +647,324 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			canvas.clear();
 			canvas.renderAll();
 			emitLayers();
+			saveToHistory();
+		},
+		// Copy/Paste functionality
+		copyActive: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			const active = canvas.getActiveObject();
+			if (active) {
+				const clipboard = JSON.stringify(active.toObject());
+				localStorage.setItem('canva-clone-clipboard', clipboard);
+			}
+		},
+		pasteFromClipboard: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			try {
+				const clipboard = localStorage.getItem('canva-clone-clipboard');
+				if (clipboard) {
+					const objData = JSON.parse(clipboard);
+					fabric.util.enlivenObjects([objData], (objects) => {
+						const obj = objects[0];
+						obj.set({
+							left: obj.left + 20,
+							top: obj.top + 20,
+						});
+						ensureIds(obj);
+						canvas.add(obj);
+						canvas.setActiveObject(obj);
+						canvas.renderAll();
+						emitLayers();
+						saveToHistory();
+					});
+				}
+			} catch (error) {
+				console.warn('Failed to paste:', error);
+			}
+		},
+		duplicateActive: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			const active = canvas.getActiveObject();
+			if (active) {
+				active.clone((cloned) => {
+					cloned.set({
+						left: cloned.left + 20,
+						top: cloned.top + 20,
+					});
+					ensureIds(cloned);
+					canvas.add(cloned);
+					canvas.setActiveObject(cloned);
+					canvas.renderAll();
+					emitLayers();
+					saveToHistory();
+				});
+			}
+		},
+		// Undo/Redo methods
+		undo: () => undo(),
+		redo: () => redo(),
+		// Zoom controls
+		zoomIn: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			const currentZoom = canvas.getZoom();
+			const newZoom = Math.min(currentZoom * 1.2, 3);
+			canvas.setZoom(newZoom);
+			canvas.renderAll();
+		},
+		zoomOut: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			const currentZoom = canvas.getZoom();
+			const newZoom = Math.max(currentZoom / 1.2, 0.1);
+			canvas.setZoom(newZoom);
+			canvas.renderAll();
+		},
+		zoomFit: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			canvas.setZoom(1);
+			canvas.renderAll();
+		},
+		// Export functionality
+		exportAsPNG: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			canvas.renderAll();
+			setTimeout(() => {
+				const dataURL = canvas.toDataURL({
+					format: 'png',
+					quality: 1,
+					multiplier: 1,
+					backgroundColor: '#ffffff',
+					enableRetinaScaling: false
+				});
+				downloadImage(dataURL, 'design.png');
+			}, 100);
+		},
+		exportAsJPG: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			canvas.renderAll();
+			setTimeout(() => {
+				const dataURL = canvas.toDataURL({
+					format: 'jpeg',
+					quality: 0.9,
+					multiplier: 1,
+					backgroundColor: '#ffffff',
+					enableRetinaScaling: false
+				});
+				downloadImage(dataURL, 'design.jpg');
+			}, 100);
+		},
+		// Alignment tools
+		alignLeft: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			const activeObjects = canvas.getActiveObjects();
+			if (activeObjects.length < 2) return;
+			
+			const leftmost = Math.min(...activeObjects.map(obj => obj.left));
+			activeObjects.forEach(obj => {
+				obj.set('left', leftmost);
+			});
+			canvas.renderAll();
+			emitLayers();
+			saveToHistory();
+		},
+		alignCenter: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			const activeObjects = canvas.getActiveObjects();
+			if (activeObjects.length < 2) return;
+			
+			const centerX = canvas.getWidth() / 2;
+			activeObjects.forEach(obj => {
+				obj.set('left', centerX - obj.getWidth() / 2);
+			});
+			canvas.renderAll();
+			emitLayers();
+			saveToHistory();
+		},
+		alignRight: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			const activeObjects = canvas.getActiveObjects();
+			if (activeObjects.length < 2) return;
+			
+			const rightmost = Math.max(...activeObjects.map(obj => obj.left + obj.getWidth()));
+			activeObjects.forEach(obj => {
+				obj.set('left', rightmost - obj.getWidth());
+			});
+			canvas.renderAll();
+			emitLayers();
+			saveToHistory();
 		},
 	}));
+
+	// Helper function to download images
+	const downloadImage = (dataURL, filename) => {
+		const link = document.createElement('a');
+		link.download = filename;
+		link.href = dataURL;
+		document.body.appendChild(link);
+		link.click();
+		document.body.removeChild(link);
+	};
+
+	// Additional handler functions for UI buttons
+	const handleZoomOut = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		const currentZoom = canvas.getZoom();
+		const newZoom = Math.max(currentZoom / 1.2, 0.1);
+		canvas.setZoom(newZoom);
+		canvas.renderAll();
+	};
+
+	const handleZoomIn = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		const currentZoom = canvas.getZoom();
+		const newZoom = Math.min(currentZoom * 1.2, 3);
+		canvas.setZoom(newZoom);
+		canvas.renderAll();
+	};
+
+	const handleZoomFit = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		canvas.setZoom(1);
+		canvas.renderAll();
+	};
+
+	const handleUndo = () => undo();
+	const handleRedo = () => redo();
+
+	const handleAlignLeft = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		const activeObjects = canvas.getActiveObjects();
+		if (activeObjects.length === 0) return;
+		
+		if (activeObjects.length === 1) {
+			// Single object - align to canvas left
+			activeObjects[0].set('left', 0);
+		} else {
+			// Multiple objects - align to leftmost
+			const leftmost = Math.min(...activeObjects.map(obj => obj.left));
+			activeObjects.forEach(obj => {
+				obj.set('left', leftmost);
+			});
+		}
+		canvas.renderAll();
+		emitLayers();
+		saveToHistory();
+	};
+
+	const handleAlignCenter = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		const activeObjects = canvas.getActiveObjects();
+		if (activeObjects.length === 0) return;
+		
+		const centerX = canvas.getWidth() / 2;
+		activeObjects.forEach(obj => {
+			obj.set('left', centerX - obj.getWidth() / 2);
+		});
+		canvas.renderAll();
+		emitLayers();
+		saveToHistory();
+	};
+
+	const handleAlignRight = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		const activeObjects = canvas.getActiveObjects();
+		if (activeObjects.length === 0) return;
+		
+		if (activeObjects.length === 1) {
+			// Single object - align to canvas right
+			activeObjects[0].set('left', canvas.getWidth() - activeObjects[0].getWidth());
+		} else {
+			// Multiple objects - align to rightmost
+			const rightmost = Math.max(...activeObjects.map(obj => obj.left + obj.getWidth()));
+			activeObjects.forEach(obj => {
+				obj.set('left', rightmost - obj.getWidth());
+			});
+		}
+		canvas.renderAll();
+		emitLayers();
+		saveToHistory();
+	};
+
+	const handleExportPNG = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		
+		// Force render and wait a bit for completion
+		canvas.renderAll();
+		
+		// Use setTimeout to ensure rendering is complete
+		setTimeout(() => {
+			const dataURL = canvas.toDataURL({
+				format: 'png',
+				quality: 1,
+				multiplier: 1,
+				backgroundColor: '#ffffff',
+				enableRetinaScaling: false
+			});
+			downloadImage(dataURL, 'design.png');
+		}, 100);
+	};
+
+	const handleExportJPG = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		
+		// Force render and wait a bit for completion
+		canvas.renderAll();
+		
+		// Use setTimeout to ensure rendering is complete
+		setTimeout(() => {
+			const dataURL = canvas.toDataURL({
+				format: 'jpeg',
+				quality: 0.9,
+				multiplier: 1,
+				backgroundColor: '#ffffff',
+				enableRetinaScaling: false
+			});
+			downloadImage(dataURL, 'design.jpg');
+		}, 100);
+	};
 
   return (
     <div className="canvas-container">
       <div className="canvas-tools">
         <div className="zoom-controls">
+          <button onClick={handleZoomOut} title="Zoom Out">-</button>
           <span>100%</span>
+          <button onClick={handleZoomIn} title="Zoom In">+</button>
+          <button onClick={handleZoomFit} title="Fit to Screen">⌂</button>
+        </div>
+        <div className="canvas-actions">
+          <button onClick={handleUndo} title="Undo (Ctrl+Z)">↶</button>
+          <button onClick={handleRedo} title="Redo (Ctrl+Y)">↷</button>
+          <button onClick={handleCopy} title="Copy (Ctrl+C)">📋</button>
+          <button onClick={handlePaste} title="Paste (Ctrl+V)">📄</button>
+          <button onClick={handleDuplicate} title="Duplicate (Ctrl+D)">📄</button>
+        </div>
+        <div className="alignment-controls">
+          <button onClick={handleAlignLeft} title="Align Left">⫷</button>
+          <button onClick={handleAlignCenter} title="Align Center">⫸</button>
+          <button onClick={handleAlignRight} title="Align Right">⫸</button>
+        </div>
+        <div className="export-controls">
+          <button onClick={handleExportPNG} title="Export as PNG">PNG</button>
+          <button onClick={handleExportJPG} title="Export as JPG">JPG</button>
         </div>
       </div>
       <div className="canvas-area">

@@ -15,6 +15,7 @@
   background-color: #ffffff;
   border-bottom: 1px solid #e6e8eb;
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+  gap: 20px;
 }
 
 .zoom-controls {
@@ -27,6 +28,109 @@
 
 .zoom-controls span {
   font-weight: 500;
+  min-width: 40px;
+  text-align: center;
+}
+
+.zoom-controls button {
+  background-color: #f8f9fa;
+  border: 1px solid #e6e8eb;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #333333;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.zoom-controls button:hover {
+  background-color: #e6e8eb;
+  border-color: #d0d4d9;
+}
+
+.canvas-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.canvas-actions button {
+  background-color: #f8f9fa;
+  border: 1px solid #e6e8eb;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #333333;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.canvas-actions button:hover {
+  background-color: #e6e8eb;
+  border-color: #d0d4d9;
+}
+
+.export-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.export-controls button {
+  background-color: #00c4cc;
+  border: none;
+  border-radius: 4px;
+  padding: 6px 12px;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.export-controls button:hover {
+  background-color: #00a8ae;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.alignment-controls {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.alignment-controls button {
+  background-color: #f8f9fa;
+  border: 1px solid #e6e8eb;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #333333;
+  cursor: pointer;
+  transition: all 0.2s;
+  min-width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.alignment-controls button:hover {
+  background-color: #e6e8eb;
+  border-color: #d0d4d9;
 }
 
 .layer-button {
