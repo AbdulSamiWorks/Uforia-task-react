@@ -22,6 +22,37 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 			orderIndex: index, // 0 is bottom, last is top
 		}));
 		onLayersChange && onLayersChange(layers);
+		// Auto-save canvas state
+		saveCanvasState();
+	};
+
+	// Save canvas state to localStorage
+	const saveCanvasState = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		try {
+			const canvasData = JSON.stringify(canvas.toJSON());
+			localStorage.setItem('canva-clone-canvas', canvasData);
+		} catch (error) {
+			console.warn('Failed to save canvas state:', error);
+		}
+	};
+
+	// Load canvas state from localStorage
+	const loadCanvasState = () => {
+		const canvas = fabricRef.current;
+		if (!canvas) return;
+		try {
+			const savedData = localStorage.getItem('canva-clone-canvas');
+			if (savedData) {
+				canvas.loadFromJSON(savedData, () => {
+					canvas.renderAll();
+					emitLayers();
+				});
+			}
+		} catch (error) {
+			console.warn('Failed to load canvas state:', error);
+		}
 	};
 
 	// helper to assign ids on add
@@ -98,6 +129,9 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 		canvas.setWidth(800);
 		canvas.setHeight(600);
 		canvas.renderAll();
+
+		// Load saved canvas state after initialization
+		loadCanvasState();
 
 		return () => {
 			document.removeEventListener('keydown', handleKey);
@@ -390,6 +424,17 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 				canvas.requestRenderAll();
 				emitLayers();
 			}
+		},
+		// Persistence methods
+		saveCanvas: () => {
+			saveCanvasState();
+		},
+		clearCanvas: () => {
+			const canvas = fabricRef.current;
+			if (!canvas) return;
+			canvas.clear();
+			canvas.renderAll();
+			emitLayers();
 		},
 	}));
 

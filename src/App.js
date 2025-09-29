@@ -70,7 +70,7 @@ function App() {
 
   return (
     <div className="App">
-      <TopBar />
+      <TopBar canvasRef={canvasRef} />
       <div className="main-container">
         <LeftMenu openPopup={openPopup} />
         <Canvas
