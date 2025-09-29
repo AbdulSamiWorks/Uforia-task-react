@@ -76,6 +76,8 @@ const ShapePropertiesPopup = ({ isOpen, onClose, canvasRef, mode = 'add' }) => {
               <option value="rectangle">Rectangle</option>
               <option value="circle">Circle</option>
               <option value="square">Square</option>
+              <option value="triangle">Triangle</option>
+              <option value="ellipse">Ellipse</option>
             </select>
           </div>
 

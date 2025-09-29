@@ -76,7 +76,12 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 
 		// keyboard delete handling
 		const handleKey = (e) => {
-			if (e.key === 'Delete') {
+			// Don't delete if user is typing in an input field
+			if (e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA' || e.target.tagName === 'SELECT') {
+				return;
+			}
+			
+			if (e.key === 'Delete' || e.key === 'Backspace') {
 				const active = canvas.getActiveObject();
 				if (active) {
 					e.preventDefault();
@@ -135,12 +140,12 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 					fontStyle: obj.fontStyle || 'normal',
 				};
 			}
-			if (obj.type === 'rect' || obj.type === 'circle') {
+			if (obj.type === 'rect' || obj.type === 'circle' || obj.type === 'triangle' || obj.type === 'ellipse') {
 				return {
 					type: 'shape',
-					shape: obj.type === 'circle' ? 'circle' : 'rectangle',
-					width: obj.width * obj.scaleX,
-					height: obj.height * obj.scaleY,
+					shape: obj.type === 'circle' ? 'circle' : obj.type === 'triangle' ? 'triangle' : obj.type === 'ellipse' ? 'ellipse' : 'rectangle',
+					width: obj.getScaledWidth ? obj.getScaledWidth() : obj.width * obj.scaleX,
+					height: obj.getScaledHeight ? obj.getScaledHeight() : obj.height * obj.scaleY,
 					fill: obj.fill || '#ffffff',
 					stroke: obj.stroke || '#000000',
 					strokeWidth: obj.strokeWidth || 0,
@@ -205,6 +210,12 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 				case 'square':
 					obj = new fabric.Rect({ left: 250, top: 250, width: Math.min(w, h), height: Math.min(w, h), fill: fill || '#f7b500', stroke: stroke || '#000000', strokeWidth: strokeWidth || 0, rx: 0, ry: 0 });
 					break;
+				case 'triangle':
+					obj = new fabric.Triangle({ left: 260, top: 260, width: w, height: h, fill: fill || '#ff7a59', stroke: stroke || '#000000', strokeWidth: strokeWidth || 0 });
+					break;
+				case 'ellipse':
+					obj = new fabric.Ellipse({ left: 270, top: 270, rx: w / 2, ry: h / 2, fill: fill || '#5ac18e', stroke: stroke || '#000000', strokeWidth: strokeWidth || 0 });
+					break;
 				case 'rectangle':
 				default:
 					obj = new fabric.Rect({ left: 300, top: 300, width: w, height: h, fill: fill || '#00c4cc', stroke: stroke || '#000000', strokeWidth: strokeWidth || 0, rx: 0, ry: 0 });
@@ -218,7 +229,7 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 
 		updateActiveShape: ({ fill, stroke, strokeWidth, width, height, cornerRadius }) => {
 			const obj = getActive();
-			if (!obj || (obj.type !== 'rect' && obj.type !== 'circle')) return;
+			if (!obj || (obj.type !== 'rect' && obj.type !== 'circle' && obj.type !== 'triangle' && obj.type !== 'ellipse')) return;
 			if (fill) obj.set('fill', fill);
 			if (stroke) obj.set('stroke', stroke);
 			if (strokeWidth !== undefined) obj.set('strokeWidth', strokeWidth);
@@ -229,6 +240,14 @@ const Canvas = forwardRef(({ onLayersChange, onSelectionChange, onObjectEditRequ
 					obj.set('rx', cornerRadius);
 					obj.set('ry', cornerRadius);
 				}
+			}
+			if (obj.type === 'triangle') {
+				if (width) obj.set('width', width);
+				if (height) obj.set('height', height);
+			}
+			if (obj.type === 'ellipse') {
+				if (width) obj.set('rx', width / 2);
+				if (height) obj.set('ry', height / 2);
 			}
 			obj.setCoords();
 			obj.canvas.requestRenderAll();
